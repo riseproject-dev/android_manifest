@@ -5,7 +5,7 @@
     fetch="https://android.googlesource.com/"
     review="https://android-review.googlesource.com/" />
   <remote name="gitlab" fetch="https://gitlab.baylibre.com/baylibre/amlogic/atv/aosp" />
-  <remote name="baydroid" fetch="https://github.com/BayLibre/" />
+  <remote name="baydroid" fetch="git@github.com:BayLibre/" />
   <default revision="android16-qpr2-release"
            remote="aosp"
            sync-j="4" />
@@ -1056,7 +1056,8 @@
   <project path="external/minigbm" name="android_external_minigbm" groups="pdk" remote="baydroid" revision="android-16" />
 
   <!-- SpacemiT K1 / Banana Pi F3 device -->
-  <project path="device/spacemit/common" name="android_device_spacemit_common" groups="device,pdk" remote="baydroid" revision="android-16" />
+  <project path="device/spacemit/common"    name="android_device_spacemit_common"    groups="device,pdk" remote="baydroid" revision="android-16" />
+  
   
   
 </manifest>
