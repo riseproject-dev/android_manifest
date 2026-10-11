@@ -365,8 +365,8 @@ package lists.
 
 Only use completed images for the corresponding board and storage layout.
 The output directory contains its Android images, bootloader payloads and
-flash helper. Flashing changes board storage; the A210 helper also erases
-`userdata` and `misc`.
+flash helper. Flashing changes board storage. The Android flash flows reset
+`misc` and select slot A; they preserve user data unless `--wipe` is requested.
 
 K3: start `fastboot usb 0` from the U-Boot console. The K3 helper has no
 serial selector, so connect only the intended fastboot board. The RISE K3
@@ -397,6 +397,13 @@ its full bootloader and Android flash helper:
 cd "$RISE_WORKSPACE/aosp/out-a210/target/product/a210" && sh flash_android_images.sh "$FASTBOOT_SERIAL"
 ```
 
+The A210 helper preserves `userdata` by default and never erases `metadata`
+or `persist`. Pass `--wipe` explicitly to erase `userdata`. It checks all
+required bootloader and Android images before the first fastboot command,
+and stops on flash, erase, reboot or slot-selection errors. Set `FASTBOOT`
+to select a specific executable; otherwise it is resolved from `PATH`.
+The helper writes GPT, loader, environment, both boot slots and `super`;
+retaining existing data requires a compatible storage layout on the board.
 
 After boot, set `ADB_SERIAL` to the board being tested. Check Android boot:
 
