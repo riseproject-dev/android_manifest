@@ -341,7 +341,7 @@ After verifying the replacement APK, preserve the old binary and copy the new
 one into the existing shared module:
 
 ```sh
-mkdir -p "$RISE_WORKSPACE/artifact-backups" && WEBVIEW_BACKUP="$(mktemp -d "$RISE_WORKSPACE/artifact-backups/webview.XXXXXX")" && cp "$RISE_WORKSPACE/aosp/device/rise/common/webview/SystemWebView64.apk" "$WEBVIEW_BACKUP/" && cp "$RISE_WORKSPACE/android-webview-riscv64/workspace/src/out/riscv64/apks/SystemWebView64.apk" "$RISE_WORKSPACE/aosp/device/rise/common/webview/SystemWebView64.apk"
+mkdir -p "$RISE_WORKSPACE/artifact-backups" && WEBVIEW_BACKUP="$(mktemp -d "$RISE_WORKSPACE/artifact-backups/webview.XXXXXX")" && cp "$RISE_WORKSPACE/aosp/device/rise/common/webview/SystemWebView64.apk" "$RISE_WORKSPACE/aosp/device/rise/common/webview/webview-build.json" "$WEBVIEW_BACKUP/" && cp "$RISE_WORKSPACE/android-webview-riscv64/workspace/src/out/riscv64/apks/SystemWebView64.apk" "$RISE_WORKSPACE/aosp/device/rise/common/webview/SystemWebView64.apk"
 ```
 
 
@@ -350,8 +350,19 @@ Both Android products include `webview_riscv64` from
 module's `Android.bp`; AOSP `external/chromium-webview` stays on its Google
 remote. Rebuild both Android products after refreshing the shared APK.
 
-The inherited M151 APK was tested on K3 in the BayLibre environment. A210
-and the rebuilt RISE images require their own runtime checks.
+The RISE host rebuild completed on 2026-10-11 from the pinned official base
+and bundled commits. APK verification passes: package `com.android.webview`,
+version `151.0.7922.108`, target SDK 36 and RISC-V ELF machine 243. The staged
+APK is 145,131,247 bytes with SHA-256
+`09dae1f296faeb93e9d61cebdbca52111d21065358f45ee380e005176d73d006`.
+Its committed `device/rise/common/webview/webview-build.json` records source
+commits, verified dependency/toolchain inputs and payload hashes. Regenerate
+that provenance record when replacing the APK; it must describe the new
+binary. The old binary and record are preserved by the command above.
+
+The inherited M151 APK had a K3 runtime report in the source-project
+environment. The rebuilt RISE APK and Android images require their own
+K3 and A210 runtime checks.
 
 The shared Android configuration is under `device/rise/common`. Both products
 inherit its product and BoardConfig makefiles. HALs, codecs, A/B and AVB
