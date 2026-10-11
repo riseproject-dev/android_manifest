@@ -3,11 +3,11 @@
 
   <!-- The AOSP remote is spelled out in full: this manifest does not live in
        android.googlesource.com, so upstream's relative fetch=".." would
-       resolve against the BayLibre remote instead. -->
+       resolve against the RISE remote instead. -->
   <remote name="aosp"
     fetch="https://android.googlesource.com/"
     review="https://android-review.googlesource.com/" />
-  <remote name="baydroid" fetch="git@github.com:BayLibre/" />
+  <remote name="rise" fetch="ssh://git@github.com/riseproject-dev/" />
   <default revision="android17-release"
            remote="aosp"
            sync-j="4" />
@@ -1125,27 +1125,22 @@
 
 
   <!-- ==================================================================
-       BayLibre SpacemiT BSP overrides (Android 17)
+       RISE RISC-V BSP overrides (Android 17)
 
        Every fork of an upstream AOSP project is wired as
-       <remove-project> + a new <project remote="baydroid"> appended here,
+       <remove-project> + a new <project remote="rise"> appended here,
        never by editing the upstream <project> line in place.
 
-       NOTE: the BayLibre forks below still track their android-16
-       branches. They are rebased onto Android 17 in-tree first; the
-       revisions flip to android-17 once those branches are pushed.
+       The RISE remote uses SSH to access the private repositories.
        ================================================================== -->
 
-  <!-- drm_hwcomposer: pin the revision the BSP is validated against.
-       Upstream ships it branch-tracked; the BSP needs a known-good sha. -->
+  <!-- RISE display composer with preferred-mode and external sRGB fixes. -->
   <remove-project name="platform/external/drm_hwcomposer" />
-  <project path="external/drm_hwcomposer" name="platform/external/drm_hwcomposer"
-           revision="03dabbfe742138224d8b4f70a0eef19ade489d57" groups="drm_hwcomposer,pdk-fs" />
+  <project path="external/drm_hwcomposer" name="android_external_drm_hwcomposer"
+           remote="rise" revision="android-17" groups="drm_hwcomposer,pdk-fs" />
 
-  <!-- BayLibre HALs shared across boards -->
-  <project path="hardware/generic/audio"   name="android_hardware_baylibre_audio"   groups="device,pdk" remote="baydroid" revision="android-17-generic" />
-  <project path="hardware/generic/thermal" name="android_hardware_baylibre_thermal" groups="device,pdk" remote="baydroid" revision="android-17" />
-  <project path="hardware/generic/usb"     name="android_hardware_baylibre_usb"     groups="device,pdk" remote="baydroid" revision="main" />
+  <!-- Generic audio, thermal and USB HALs share one repository. -->
+  <project path="hardware/generic" name="android_generic_hal" groups="device,pdk" remote="rise" revision="android-17" />
 
   <!-- Realtek WiFi HAL: supplies libwifi-hal-rtk, which BOARD_WLAN_DEVICE :=
        realtek resolves to. The history carries the DC-DeepComputing-android
@@ -1153,35 +1148,32 @@
        wlan/wifi_hal only, and the include fixes needed to build against the
        current AOSP headers. Not a fork of an upstream AOSP project, so no
        remove-project. -->
-  <project path="hardware/realtek" name="android_hardware_realtek" groups="device,pdk" remote="baydroid" revision="android-17" />
+  <project path="hardware/realtek" name="android_hardware_realtek" groups="device,pdk" remote="rise" revision="android-17" />
 
-  <!-- minigbm: BayLibre fork (gbm_mesa + dma_heap + runtime backend selection) -->
+  <!-- minigbm: RISE fork (gbm_mesa + dma_heap + runtime backend selection) -->
   <remove-project name="platform/external/minigbm" />
-  <project path="external/minigbm" name="android_external_minigbm" groups="pdk" remote="baydroid" revision="android-17" />
+  <project path="external/minigbm" name="android_external_minigbm" groups="pdk" remote="rise" revision="android-17" />
 
-  <!-- build/soong: BayLibre fork (SpacemiT X60 riscv64 arch variant, GOGC/GOMEMLIMIT forwarding) -->
+  <!-- build/soong: RISE fork (K3 X100 and A210 riscv64 variants) -->
   <remove-project name="platform/build/soong" />
-  <project path="build/soong" name="android_build_soong" groups="pdk,tradefed,sysui-studio" remote="baydroid" revision="android-17" >
+  <project path="build/soong" name="android_build_soong" groups="pdk,tradefed,sysui-studio" remote="rise" revision="android-17" >
     <linkfile src="root.bp" dest="Android.bp" />
     <linkfile src="bootstrap.bash" dest="bootstrap.bash" />
   </project>
 
-  <!-- build/blueprint: BayLibre fork (collect freed module memory before writing
+  <!-- build/blueprint: RISE fork (collect freed module memory before writing
        build files; cuts the soong_build analysis peak, companion to the soong
        GOMEMLIMIT commit). Wired into the manifest as of Android 17 - on
        android-16 this fork was only ever applied by hand. -->
   <remove-project name="platform/build/blueprint" />
-  <project path="build/blueprint" name="android_build_blueprint" groups="pdk,tradefed" remote="baydroid" revision="android-17" />
+  <project path="build/blueprint" name="android_build_blueprint" groups="pdk,tradefed" remote="rise" revision="android-17" />
 
-  <!-- SpacemiT boards: K1 (Banana Pi F3, MusePi Pro) and K3 (Pico-ITX) -->
-  <project path="device/spacemit/common"    name="android_device_spacemit_common"    groups="device,pdk" remote="baydroid" revision="android-17" />
-  
-  <project path="device/spacemit/k3"        name="android_device_spacemit_k3"        groups="device,pdk" remote="baydroid" revision="android-17" />
-  <project path="device/spacemit/kernel"      name="android_device_spacemit_kernel"    groups="device,pdk" remote="baydroid" revision="android-17" />
-  <project path="vendor/spacemit"           name="android_vendor_spacemit"           groups="device,pdk" remote="baydroid" revision="android-17" />
+  <!-- SpacemiT K3 and Alibaba A210 devices, kernel prebuilts and firmware. -->
+  <project path="device/rise" name="android_device_rise" groups="device,pdk" remote="rise" revision="android-17" />
+  <project path="vendor/rise" name="android_vendor_rise" groups="device,pdk" remote="rise" revision="android-17" />
 
   <!-- repo does not fetch Git LFS payloads, so a fresh checkout keeps the
        WebView APK as its pointer text and signapk fails on it. The hook in
-       device/spacemit/common pulls them once the sync is done. -->
-  <repo-hooks in-project="android_device_spacemit_common" enabled-list="post-sync" />
+       device/rise pulls them once the sync is done. -->
+  <repo-hooks in-project="android_device_rise" enabled-list="post-sync" />
 </manifest>

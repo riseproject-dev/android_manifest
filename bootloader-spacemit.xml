@@ -1,31 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <manifest>
-  <remote name="baydroid" fetch="git@github.com:BayLibre/"/>
-  <default remote="baydroid" sync-j="4"/>
+  <remote name="rise" fetch="ssh://git@github.com/riseproject-dev/"/>
+  <default remote="rise" sync-j="4"/>
 
-  <!-- SpacemiT bootloader chains. See the manifest repo README for the
-       workflow; the entry point for both boards is
-       build-bootloaders/release_android.sh.
-
-       The board yaml selects the source trees. The K1 config has no src
-       keys and falls back to the pi-u-boot and pi-opensbi vendor forks
-       below (U-Boot 2022.10, OpenSBI 1.3). The K3 config points at
-       upstream U-Boot and upstream OpenSBI instead.
-
-       The riscv64 toolchain is downloaded on first build by
-       build-bootloaders/utils.sh. Outputs are staged into the AOSP tree
-       under vendor/spacemit/BOARD/bootloader/.
-  -->
   <project path="build-bootloaders" name="android_bootloader_build" revision="spacemit-android-17"/>
-
-  <!-- K1: Banana Pi F3 and MusePi Pro, vendor 2022.10 chain -->
-  
-  
-
-  <!-- K3: Pico-ITX, upstream U-Boot 2026.07 and upstream OpenSBI 1.8 chain.
-       Same repositories as the K1 above, checked out a second time at the
-       paths the K3 board yaml names in its src keys. -->
-  <project path="u-boot"  name="pi-u-boot"  revision="v2026.07-k3"/>
-  <project path="opensbi" name="pi-opensbi" revision="v1.8-k3"/>
-
+  <project path="u-boot" name="u-boot" revision="v2026.07-k3"/>
+  <project path="opensbi" name="opensbi" revision="v1.8-k3"/>
 </manifest>
