@@ -37,7 +37,6 @@ are already available from the RISE remotes.
 | [opensbi](https://github.com/riseproject-dev/opensbi) | `v1.8-k3 / v1.5-a210` | `bootloaders_*/opensbi` |
 | [mesa](https://github.com/riseproject-dev/mesa) | `android-17-imagination` | `mesa` |
 | [android-webview-riscv64](https://github.com/riseproject-dev/android-webview-riscv64) | `android-17` | `android-webview-riscv64` |
-| [chromium](https://github.com/riseproject-dev/chromium) | `riscv-m151` | `Chromium workspace/src (base and RISC-V series)` |
 
 The manifest remote is:
 
@@ -280,25 +279,26 @@ not update the libraries consumed by K3 or A210.
 
 ## Chromium and WebView
 
-K3 and A210 consume the same Android `riscv64` APK. The RISE branch is
-`riscv-m151`, carrying the original `spacemit-riscv64-m151` commits.
-Renaming the delivery branch changes neither the source history nor the
-build configuration. Builds use the normal
+K3 and A210 consume the same Android `riscv64` APK. Builds use the normal
 `android-webview-riscv64/workspace/src` checkout created by the recipe below.
 
 The recipe is in
 [`riseproject-dev/android-webview-riscv64`](https://github.com/riseproject-dev/android-webview-riscv64).
-It fetches the pinned Chromium base and the original seven RISC-V commits
-from [`riseproject-dev/chromium`](https://github.com/riseproject-dev/chromium),
-then applies the three patches for separate DEPS repositories. `depot_tools`
-and DEPS dependencies come from their public upstreams.
+It fetches the pinned base from the official
+[Chromium repository](https://chromium.googlesource.com/chromium/src/), then
+replays the seven original RISC-V commits bundled in `patches/chromium/`.
+Original author and committer metadata, messages and signoffs are preserved;
+each reconstructed commit SHA is checked against `series.json`. The recipe
+also carries the three patches for separate DEPS repositories. `depot_tools`
+and DEPS dependencies come from their public upstreams. All local changes
+needed to rebuild the APK are in the RISE recipe repository.
 
 | Input | Revision |
 | --- | --- |
 | Chromium release | `151.0.7922.108` |
 | Upstream commit | `4744b886309d987d292e43232776d2206cccb13d` |
-| RISE branch | `riscv-m151` |
-| RISE series commit | `0139499e9c33d18e27a0499ead341ca649f069e2` |
+| Official release tag | `151.0.7922.108` |
+| Reconstructed series tip | `0139499e9c33d18e27a0499ead341ca649f069e2` |
 | depot_tools | `533321c34e1c3ba816bc5e820004fffe5b7fe4ad` |
 
 Clone the recipe:
@@ -315,25 +315,33 @@ cd "$RISE_WORKSPACE/android-webview-riscv64" && ./scripts/01-fetch.sh && ./scrip
 
 
 See the recipe's [README](https://github.com/riseproject-dev/android-webview-riscv64/blob/android-17/README.md)
-for host requirements, GN options and runtime checks. Both Chromium remotes
-are fixed to `git@github.com:riseproject-dev/chromium.git`; they do not depend
-on the recipe checkout's origin. The dependency patches must be reapplied
+for host requirements, GN options and runtime checks. The source remote is
+`https://chromium.googlesource.com/chromium/src.git`; applying the bundled
+series requires no separate fork. The dependency patches must be reapplied
 after a `gclient sync`.
 
 After verifying the replacement APK, copy it into the existing shared module:
 
 ```sh
-cp "$RISE_WORKSPACE/android-webview-riscv64/workspace/src/out/riscv64/apks/SystemWebView64.apk" "$RISE_WORKSPACE/aosp/device/rise/spacemit/common/webview/SystemWebView64.apk"
+cp "$RISE_WORKSPACE/android-webview-riscv64/workspace/src/out/riscv64/apks/SystemWebView64.apk" "$RISE_WORKSPACE/aosp/device/rise/common/webview/SystemWebView64.apk"
 ```
 
 
 Both Android products include `webview_riscv64` from
-`device/rise/spacemit/common/webview`. Git LFS tracks its APK. Retain that
+`device/rise/common/webview`. Git LFS tracks its APK. Retain that
 module's `Android.bp`; AOSP `external/chromium-webview` stays on its Google
 remote. Rebuild both Android products after refreshing the shared APK.
 
 The inherited M151 APK was tested on K3 in the BayLibre environment. A210
 and the rebuilt RISE images require their own runtime checks.
+
+The shared Android configuration is under `device/rise/common`. Both products
+inherit its product and BoardConfig makefiles. HALs, codecs, A/B and AVB
+configuration, shared policies and overlays are maintained there; CPU tuning,
+kernel modules, partition groups, firmware and board wiring stay with K3 or
+A210. The riscv64 SuperTuxKart prebuilt is also under `common/supertuxkart`.
+Its module is available to both products but is not selected in their default
+package lists.
 
 ## Board deployment and checks
 
