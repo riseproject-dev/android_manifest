@@ -50,7 +50,9 @@ The manifest remote is:
 
 The HWC fork preserves the pinned Android source history and the original
 authors and signoffs of the preferred-mode and external sRGB fixes.
-The client must create `android_external_drm_hwcomposer` before publication.
+Ensure `android_external_drm_hwcomposer` exists and the publishing SSH identity
+has access before publication. The client must create this private fork if it
+is not available yet.
 The prepared source uses Android 17 interfaces; complete Android builds
 and display tests remain required on both boards.
 
