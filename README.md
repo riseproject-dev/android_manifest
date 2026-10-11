@@ -335,10 +335,11 @@ for host requirements, GN options and runtime checks. The source remote is
 series requires no separate fork. The dependency patches must be reapplied
 after a `gclient sync`.
 
-After verifying the replacement APK, copy it into the existing shared module:
+After verifying the replacement APK, preserve the old binary and copy the new
+one into the existing shared module:
 
 ```sh
-cp "$RISE_WORKSPACE/android-webview-riscv64/workspace/src/out/riscv64/apks/SystemWebView64.apk" "$RISE_WORKSPACE/aosp/device/rise/common/webview/SystemWebView64.apk"
+mkdir -p "$RISE_WORKSPACE/artifact-backups" && WEBVIEW_BACKUP="$(mktemp -d "$RISE_WORKSPACE/artifact-backups/webview.XXXXXX")" && cp "$RISE_WORKSPACE/aosp/device/rise/common/webview/SystemWebView64.apk" "$WEBVIEW_BACKUP/" && cp "$RISE_WORKSPACE/android-webview-riscv64/workspace/src/out/riscv64/apks/SystemWebView64.apk" "$RISE_WORKSPACE/aosp/device/rise/common/webview/SystemWebView64.apk"
 ```
 
 
