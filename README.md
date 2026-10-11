@@ -211,14 +211,29 @@ cd "$RISE_WORKSPACE/bootloaders_alibaba/build-bootloaders" && bash release_andro
 | A210 | `config/boards/alibaba-a210.yaml` | `vendor/rise/alibaba/a210/bootloader` |
 
 The default release command copies files without making a commit or changing
-the Git index. `--mode=debug` builds the debug chain; `--no-build` stages
-existing outputs. See the board-specific README in `build-bootloaders` for
-individual component builds.
+the Git index. `--mode=debug` builds the debug chain. Each successful build
+records source commits, configuration, output hashes and its build log in
+`.bootloader-build.json` inside its output directory. Staging verifies this
+record and every artifact before copying anything, then records the import in the Android
+destination's `bootloader-build.json`. `--no-build` requires this valid record;
+an unrecorded or changed output is rejected. See the board-specific README
+in `build-bootloaders` for individual component builds.
 
 K3 FSBL and bootinfo are produced by its U-Boot tree. EC firmware is an
 optional existing vendor blob selected with `EC_BIN`; it is not rebuilt by
 these scripts. A210 retains the vendor BootZero binary and generates its
 loader and primary GPT for 64 GB eMMC.
+
+K3 SPL loads the combined U-Boot FIT at NOR offset `0x210000`. This FIT
+contains OpenSBI in debug and release builds. The flash helper writes
+`bootinfo`, `fsbl`, `env` and `uboot`; it skips the standalone OpenSBI image
+and its legacy NOR slot. The environment image is 64 KiB, matching the
+existing environment partition. SD/genimage and vendor JSON `multi_flash`
+workflows are unsupported; `--sdcard` fails explicitly.
+
+The NOR bootinfo retains the vendor fallback SPL1 offset `0xa0000`, which
+also identifies the environment slot. Only primary SPL0 at `0x20000` is
+programmed. Recovery through a second SPL copy remains unverified on hardware.
 
 Both bootloaders load the Android v4 `init_boot` ramdisk. The A210 build
 enables AVB verification of boot, vendor_boot and init_boot. Its current
@@ -362,6 +377,11 @@ flash Android only:
 cd "$RISE_WORKSPACE/aosp/out-k3/target/product/k3" && bash flash_pico_itx.sh --android
 ```
 
+
+The K3 helper preserves `userdata`, `metadata` and `persist` by default in
+the normal and DFU Android flows. Pass `--wipe` explicitly for a fresh data
+partition. Set `FASTBOOT` to select a specific fastboot executable; otherwise
+it is resolved from `PATH`.
 
 `--bootloader` writes the K3 boot chain to SPI-NOR; `--dfu` uses the BROM
 staging path. These bring-up paths and the K3 storage selection require
