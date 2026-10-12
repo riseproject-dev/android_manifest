@@ -244,9 +244,8 @@ also identifies the environment slot. Only primary SPL0 at `0x20000` is
 programmed. Recovery through a second SPL copy remains unverified on hardware.
 
 Both bootloaders load the Android v4 `init_boot` ramdisk. The A210 build
-enables AVB verification of boot, vendor_boot and init_boot. Its current
-development backend reports an unlocked device and does not persist rollback
-indexes; a locked production chain needs a secure backend and separate tests.
+matches the validated boot configuration with U-Boot AVB verification
+disabled. The Android images still contain their AVB metadata.
 
 ## Mesa PowerVR builds
 
@@ -383,7 +382,7 @@ package lists.
 Only use completed images for the corresponding board and storage layout.
 The output directory contains its Android images, bootloader payloads and
 flash helper. Flashing changes board storage. The Android flash flows reset
-`misc` and select slot A; they preserve user data unless `--wipe` is requested.
+`misc` and start from slot A; they preserve user data unless `--wipe` is requested.
 
 K3: start `fastboot usb 0` from the U-Boot console. The K3 helper has no
 serial selector, so connect only the intended fastboot board. The RISE K3
