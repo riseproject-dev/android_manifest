@@ -108,6 +108,12 @@ It installs Git LFS locally for the device repo and materializes the APK
 and kernel payloads. A Git LFS pointer is not a usable APK or kernel image.
 Fix reported LFS errors before building.
 
+The hook also applies the bundled RVV zlib tail-load fix from
+`device/rise/common/patches/zlib-rvv-tail.patch` to the upstream AOSP zlib
+source. Re-running the hook leaves an applied patch unchanged; a source
+conflict stops the hook with an error. The patch is delivered by
+[android_device_rise](https://github.com/riseproject-dev/android_device_rise).
+
 | Board | Lunch target | Output with the commands below |
 | --- | --- | --- |
 | K3 Pico-ITX | `aosp_k3_pico_itx-trunk_staging-userdebug` | `aosp/out-k3/target/product/k3` |
@@ -456,3 +462,8 @@ Keep those revision snapshots with artifact checksums and board results.
 They must identify the commits actually used to produce the delivered
 binaries; a snapshot taken with uncommitted changes does not capture those
 changes.
+
+Include `device/rise/common/patches/zlib-rvv-tail.patch` with the resolved
+device revision: the post-sync hook deliberately patches the upstream
+zlib worktree, and its upstream Git revision alone does not capture that
+fix.
