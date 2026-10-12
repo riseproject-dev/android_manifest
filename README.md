@@ -28,6 +28,7 @@ are already available from the RISE remotes.
 | [android_hardware_realtek](https://github.com/riseproject-dev/android_hardware_realtek) | `android-17` | `aosp/hardware/realtek` |
 | [android_external_drm_hwcomposer](https://github.com/riseproject-dev/android_external_drm_hwcomposer) | `android-17` | `aosp/external/drm_hwcomposer` |
 | [android_external_minigbm](https://github.com/riseproject-dev/android_external_minigbm) | `android-17` | `aosp/external/minigbm` |
+| [android_external_zlib](https://github.com/riseproject-dev/android_external_zlib) | `android-17` | `aosp/external/zlib` |
 | [android_build_soong](https://github.com/riseproject-dev/android_build_soong) | `android-17` | `aosp/build/soong` |
 | [android_build_blueprint](https://github.com/riseproject-dev/android_build_blueprint) | `android-17` | `aosp/build/blueprint` |
 | [android_kernel_common](https://github.com/riseproject-dev/android_kernel_common) | `android-mainline-spacemit / android-mainline-alibaba` | `kernel_*/common` |
@@ -108,11 +109,10 @@ It installs Git LFS locally for the device repo and materializes the APK
 and kernel payloads. A Git LFS pointer is not a usable APK or kernel image.
 Fix reported LFS errors before building.
 
-The hook also applies the bundled RVV zlib tail-load fix from
-`device/rise/common/patches/zlib-rvv-tail.patch` to the upstream AOSP zlib
-source. Re-running the hook leaves an applied patch unchanged; a source
-conflict stops the hook with an error. The patch is delivered by
-[android_device_rise](https://github.com/riseproject-dev/android_device_rise).
+The [android_external_zlib](https://github.com/riseproject-dev/android_external_zlib)
+fork preserves the AOSP history and includes the board-tested RVV Adler-32
+tail-load fix. The manifest selects its `android-17` branch, so `repo sync`
+checks out the committed fix directly.
 
 | Board | Lunch target | Output with the commands below |
 | --- | --- | --- |
@@ -462,7 +462,6 @@ They must identify the commits actually used to produce the delivered
 binaries; a snapshot taken with uncommitted changes does not capture those
 changes.
 
-Include `device/rise/common/patches/zlib-rvv-tail.patch` with the resolved
-device revision: the post-sync hook deliberately patches the upstream
-zlib worktree, and its upstream Git revision alone does not capture that
-fix.
+Keep the resolved `android_external_zlib` revision with the build records.
+Its commit identifies the RVV tail-load fix included in the delivered
+binaries.
