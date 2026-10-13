@@ -370,9 +370,8 @@ The shared Android configuration is under `device/rise/common`. Both products
 inherit its product and BoardConfig makefiles. HALs, codecs, A/B and AVB
 configuration, shared policies and overlays are maintained there; CPU tuning,
 kernel modules, partition groups, firmware and board wiring stay with K3 or
-A210. The riscv64 SuperTuxKart prebuilt is also under `common/supertuxkart`.
-Its module is available to both products but is not selected in their default
-package lists.
+A210. Both products include the shared SuperTuxKart, Luanti, Mindustry and
+OpenTTD prebuilts. SuperTuxKart uses the common scalar-ASTC APK.
 
 ## Board deployment and checks
 
