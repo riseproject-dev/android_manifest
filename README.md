@@ -375,49 +375,236 @@ OpenTTD prebuilts. SuperTuxKart uses the common scalar-ASTC APK.
 
 ## Board deployment and checks
 
-Only use completed images for the corresponding board and storage layout.
-The output directory contains its Android images, bootloader payloads and
-flash helper. Flashing changes board storage. The Android flash flows reset
-`misc` and start from slot A; they preserve user data unless `--wipe` is requested.
+Use the complete image set for the board being flashed. Keep the helper next
+to its images and retain K3's `factory/` directory. Do not mix image lots.
+The boot chain is on SPI-NOR and Android on UFS for K3; A210 uses eMMC.
 
-K3: start `fastboot usb 0` from the U-Boot console. The K3 helper has no
-serial selector, so connect only the intended fastboot board. The RISE K3
-configuration targets SPI-NOR for the boot chain and UFS/SCSI device 0
-for Android. `--android-media` accepts only `ufs`; it does not change the
-backend compiled into U-Boot. Confirm this bootloader and partition layout
-on the board before using the flash helper. With a working bootloader,
-flash Android only:
+### Host tools and image directories
+
+Use Linux with `fastboot`, `adb`, `tar`, `sha256sum` and `lsusb` (`usbutils`),
+and an account with USB device access. Connect the flashing port with a
+USB data cable, provide stable board power and attach UART at 115200 baud.
+Set `FASTBOOT` to the executable to use, or resolve it from `PATH`:
 
 ```sh
-cd "$RISE_WORKSPACE/aosp/out-k3/target/product/k3" && bash flash_pico_itx.sh --android
+export FASTBOOT="${FASTBOOT:-$(command -v fastboot)}" && test -x "$FASTBOOT" && "$FASTBOOT" --version
 ```
 
-
-The K3 helper preserves `userdata`, `metadata` and `persist` by default in
-the normal and DFU Android flows. Pass `--wipe` explicitly for a fresh data
-partition. Set `FASTBOOT` to select a specific fastboot executable; otherwise
-it is resolved from `PATH`.
-
-`--bootloader` writes the K3 boot chain to SPI-NOR; `--dfu` uses the BROM
-staging path. These bring-up paths and the K3 storage selection require
-hardware verification; a host build does not establish that they work.
-
-A210: set `FASTBOOT_SERIAL` to the board's fastboot identifier before using
-its full bootloader and Android flash helper:
+For images built in this workspace:
 
 ```sh
-cd "$RISE_WORKSPACE/aosp/out-a210/target/product/a210" && sh flash_android_images.sh "$FASTBOOT_SERIAL"
+export K3_IMAGES="$RISE_WORKSPACE/aosp/out-k3/target/product/k3"
 ```
 
-The A210 helper preserves `userdata` by default and never erases `metadata`
-or `persist`. Pass `--wipe` explicitly to erase `userdata`. It checks all
-required bootloader and Android images before the first fastboot command,
-and stops on flash, erase, reboot or slot-selection errors. Set `FASTBOOT`
-to select a specific executable; otherwise it is resolved from `PATH`.
-The helper writes GPT, loader, environment, both boot slots and `super`;
-retaining existing data requires a compatible storage layout on the board.
+```sh
+export A210_IMAGES="$RISE_WORKSPACE/aosp/out-a210/target/product/a210"
+```
 
-After boot, set `ADB_SERIAL` to the board being tested. Check Android boot:
+For the delivered 2026-10-12 archives, place both archives and their outer
+`SHA256SUMS` in `$RISE_WORKSPACE/packages`, then verify and extract them:
+
+```sh
+cd "$RISE_WORKSPACE/packages" && sha256sum -c SHA256SUMS
+```
+
+```sh
+mkdir -p "$RISE_WORKSPACE/images" && tar -xzf "$RISE_WORKSPACE/packages/spacemit-k3-android17-20261012.tar.gz" -C "$RISE_WORKSPACE/images" && export K3_IMAGES="$RISE_WORKSPACE/images/spacemit-k3-android17-20261012" && cd "$K3_IMAGES" && sha256sum -c SHA256SUMS
+```
+
+```sh
+mkdir -p "$RISE_WORKSPACE/images" && tar -xzf "$RISE_WORKSPACE/packages/alibaba-a210-android17-20261012.tar.gz" -C "$RISE_WORKSPACE/images" && export A210_IMAGES="$RISE_WORKSPACE/images/alibaba-a210-android17-20261012" && cd "$A210_IMAGES" && sha256sum -c SHA256SUMS
+```
+
+Each archive contains the executable flash helper, bootloader payloads,
+Android images and `SHA256SUMS`. Keep build and test records separately.
+A freshly built product directory needs its own checksum record when
+preparing a new delivery.
+
+### K3 first installation and recovery
+
+Connect power first through the full-featured Type-C port (17) or ATX
+connector (15). With the board powered, follow the manufacturer's
+section 3.1.2:
+
+1. Press and hold the FDL flashing button.
+2. Briefly press the RST reset button.
+3. Release the FDL flashing button.
+4. Use the flashing Type-C data cable to connect the DRD Type-C port to the
+   host computer.
+
+The DRD Type-C port (18) does not power the board. The
+[SpacemiT K3 hardware guide](https://cdn-resource.spacemit.com/file/product/K3/k3_pico_ug_en.pdf)
+shows the ports and button positions in sections 2.2, 2.3.2 and 3.1.2.
+For the powered-off alternative in section 3.1.1, hold FDL while connecting
+the power supply, release FDL, then connect the DRD Type-C data cable.
+Confirm BROM USB ID `361c:1001`:
+
+```sh
+lsusb -d 361c:1001 && "$FASTBOOT" devices
+```
+
+Connect only the intended fastboot board: the K3 helper has no serial
+selector. For a first installation with fresh data:
+
+```sh
+cd "$K3_IMAGES" && bash flash_pico_itx.sh --dfu --wipe
+```
+
+This stages this image set's FSBL and U-Boot into RAM, installs the boot
+chain in SPI-NOR, creates the Android GPT on UFS/SCSI device 0, writes both
+Android boot slots and `super`, initializes data, then requests a reboot.
+Power-cycle if the automatic reboot fails. The complete DFU flow passed on
+the independently tested K3 for the 2026-10-12 scalar-STK lot; recovery using
+the secondary SPL copy remains unverified.
+
+For recovery while retaining data on a compatible partition layout:
+
+```sh
+cd "$K3_IMAGES" && bash flash_pico_itx.sh --dfu
+```
+
+### K3 updates with a working bootloader
+
+Connect the flashing USB port and UART, reset or power on, and press a key
+in the UART terminal during the U-Boot autoboot countdown. At the **board's
+U-Boot prompt**, enter:
+
+```sh
+fastboot usb 0
+```
+
+On the **host**, check the fastboot endpoint, then update Android only:
+
+```sh
+"$FASTBOOT" devices
+```
+
+```sh
+cd "$K3_IMAGES" && bash flash_pico_itx.sh --android
+```
+
+To update the SPI-NOR bootloader and Android together on an existing
+Android GPT layout:
+
+```sh
+cd "$K3_IMAGES" && bash flash_pico_itx.sh
+```
+
+`--bootloader` updates only SPI-NOR. Normal fastboot modes reuse the existing
+UFS GPT; use the full `--dfu` flow for first installation or a new layout.
+The Android flows clear `misc` and reset the A/B boot state. Without
+`--wipe`, they preserve `userdata`, `metadata` and `persist`. Adding
+`--wipe` writes `userdata.img` and attempts to format `metadata` and
+`persist`; unsupported formatting is deferred to Android's first boot.
+All Android modes request a reboot. UFS is the only supported Android
+backend; the optional flag syntax is `--android-media ufs`.
+
+### A210 board connections
+
+Use the USB flashing connector shown for the carrier revision in the
+manufacturer's [V1 guide](https://developer.zhcomputing.com/zh/docs/2.8.1/A210/A210_Burning_Instruction/A210_SODIMM_V1_Burning_Instruction/)
+or [V2 guide](https://developer.zhcomputing.com/en/docs/A210/A210_SODIMM_V2_Burning_Instruction_EN/).
+Connect the board's 12 V power supply, flashing USB cable and UART.
+
+### A210 first installation and boot-ROM recovery
+
+For the A210 SODIMM V2 development board, follow the manufacturer's
+sequence to enter USB flash mode:
+
+1. Power on the board with the Power button.
+2. Press and hold the Flash button.
+3. Press the Reset button while holding the Flash button.
+
+Connect the USB flashing port shown in the board's guide to the host.
+Check the endpoint on the host:
+
+```sh
+"$FASTBOOT" devices
+```
+
+Connect only this board for recovery and omit the serial argument: BROM
+and the staged U-Boot may expose different identifiers. Run a full clean
+installation:
+
+```sh
+cd "$A210_IMAGES" && sh flash_android_images.sh --wipe && "$FASTBOOT" reboot
+```
+
+The helper stages the supplied BootZero and SPL-with-FIT images into RAM,
+reboots through those stages, then installs the eMMC bootloader and Android
+images. It does not put the board into BROM itself. To retain data on a
+compatible layout, omit `--wipe`. Return any latched recovery switch to its
+normal position before booting. This recovery description follows the
+helper and manufacturer documentation; a complete current-lot A210 hardware
+validation report is still pending.
+
+### A210 updates with a working bootloader
+
+Reset or power on, interrupt U-Boot autoboot in the UART terminal and enter
+at the **board's U-Boot prompt**:
+
+```sh
+fastboot usb 0
+```
+
+On the **host**, list the connected devices and set `FASTBOOT_SERIAL` to the
+A210 identifier printed by that command:
+
+```sh
+"$FASTBOOT" devices
+```
+
+```sh
+export FASTBOOT_SERIAL="<A210 identifier from fastboot devices>"
+```
+
+Check the selected U-Boot product, which the helper recognizes as `a2...`:
+
+```sh
+"$FASTBOOT" -s "$FASTBOOT_SERIAL" getvar product
+```
+
+Flash from the A210 image directory, then explicitly reboot after success:
+
+```sh
+cd "$A210_IMAGES" && sh flash_android_images.sh "$FASTBOOT_SERIAL" && "$FASTBOOT" -s "$FASTBOOT_SERIAL" reboot
+```
+
+For a first installation or a deliberate data wipe:
+
+```sh
+cd "$A210_IMAGES" && sh flash_android_images.sh --wipe "$FASTBOOT_SERIAL" && "$FASTBOOT" -s "$FASTBOOT_SERIAL" reboot
+```
+
+The helper always writes the 64 GB eMMC GPT, bootloader, U-Boot environment,
+both Android boot slots, vbmeta chains and `super`. It erases `misc` to reset
+A/B metadata and does not call `set_active`. It preserves `userdata` by
+default; `--wipe` erases only `userdata`. It never erases `metadata` or
+`persist`. Retaining data requires a compatible existing partition layout.
+The helper does not reboot at the end; use the explicit reboot above or
+reset/power-cycle the board after it reports success.
+
+### Troubleshooting and first boot
+
+If no endpoint appears, check the data cable, flashing port, power, host USB
+permissions and selected board mode. During RAM bootstrap the USB device
+disconnects and reconnects; if a serial-selected command waits for a device,
+check `fastboot devices` again. If a flash command fails, retain its output
+and UART log, correct the cause, and repeat the complete matching flow.
+Use BROM recovery when the installed bootloader cannot reach fastboot.
+
+Watch UART for bootloader, kernel and Android startup. Once ADB appears,
+identify the device and use its identifier as `ADB_SERIAL`:
+
+```sh
+adb devices
+```
+
+```sh
+export ADB_SERIAL="<board identifier from adb devices>"
+```
+
+Check Android boot; the expected completion value is `1`:
 
 ```sh
 adb -s "$ADB_SERIAL" shell getprop sys.boot_completed
