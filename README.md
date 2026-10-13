@@ -14,10 +14,8 @@ All BSP forks, build scripts, board prebuilts and RISC-V WebView changes must
 be available in RISE. The delivered manifests and build recipes require no
 BayLibre repository; original commit history and authorship are preserved.
 
-The prepared imports must be published on the listed branches before a
-fresh network sync can succeed. Local builds made before publication use
-cached source commits and local imports; they do not prove those branches
-are already available from the RISE remotes.
+The delivery branches listed below are hosted in RISE. A fresh checkout
+requires access to each private repository and its Git LFS payloads.
 
 | Repository | Delivery branch | Checkout path |
 | --- | --- | --- |
@@ -51,11 +49,8 @@ The manifest remote is:
 
 The HWC fork preserves the pinned Android source history and the original
 authors and signoffs of the preferred-mode and external sRGB fixes.
-Ensure `android_external_drm_hwcomposer` exists and the publishing SSH identity
-has access before publication. The client must create this private fork if it
-is not available yet.
-The prepared source uses Android 17 interfaces; complete Android builds
-and display tests remain required on both boards.
+The source uses Android 17 interfaces. Keep build checks and hardware results
+separate: K3 tests do not establish A210 functionality.
 
 ## Host and workspace
 
