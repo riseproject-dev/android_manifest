@@ -360,9 +360,11 @@ commits, verified dependency/toolchain inputs and payload hashes. Regenerate
 that provenance record when replacing the APK; it must describe the new
 binary. The old binary and record are preserved by the command above.
 
-The inherited M151 APK had a K3 runtime report in the source-project
-environment. The rebuilt RISE APK and Android images require their own
-K3 and A210 runtime checks.
+The rebuilt RISE provider passed a real-page WebView test on K3 on
+2026-10-12. Android signs the installed APK with `default_dev_cert`, so its
+SHA-256 differs from the source APK above. The tested installed APK has
+SHA-256 `0909e872c1d85b3edab16a9c59463ef2740e62d440d3b2d2b6722995a594b830`.
+A210 page rendering still needs a board test.
 
 The shared Android configuration is under `device/rise/common`. Both products
 inherit its product and BoardConfig makefiles. HALs, codecs, A/B and AVB
