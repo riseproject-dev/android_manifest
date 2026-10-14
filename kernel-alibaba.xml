@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <manifest>
   <remote  name="aosp" fetch="https://android.googlesource.com/" review="https://android-review.googlesource.com/"/>
-  <remote name="rise" fetch="ssh://git@github.com/riseproject-dev/"/>
+  <remote name="rise" fetch="https://github.com/riseproject-dev/"/>
   <default revision="main-kernel" remote="aosp" sync-j="4"/>
 
   <superproject name="kernel/superproject" remote="aosp" revision="common-android-mainline"/>

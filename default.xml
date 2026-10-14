@@ -7,7 +7,7 @@
   <remote name="aosp"
     fetch="https://android.googlesource.com/"
     review="https://android-review.googlesource.com/" />
-  <remote name="rise" fetch="ssh://git@github.com/riseproject-dev/" />
+  <remote name="rise" fetch="https://github.com/riseproject-dev/" />
   <default revision="android17-release"
            remote="aosp"
            sync-j="4" />
@@ -1130,8 +1130,6 @@
        Every fork of an upstream AOSP project is wired as
        <remove-project> + a new <project remote="rise"> appended here,
        never by editing the upstream <project> line in place.
-
-       The RISE remote uses SSH to access the private repositories.
        ================================================================== -->
 
   <!-- RISE display composer with preferred-mode and external sRGB fixes. -->

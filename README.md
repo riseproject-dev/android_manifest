@@ -7,15 +7,15 @@ checkout already contains those prebuilts.
 
 ## RISE repositories and branches
 
-All BSP repositories below are private. GitHub access to `riseproject-dev`
-and an authorized SSH key are required. These instructions use the RISE
-repositories directly; AOSP dependencies retain their Google remotes.
+All BSP repositories below are public and fetched over HTTPS. These
+instructions use the RISE repositories directly; AOSP dependencies retain
+their Google remotes.
 All BSP forks, build scripts, board prebuilts and RISC-V WebView changes must
 be available in RISE. The delivered manifests and build recipes require no
 BayLibre repository; original commit history and authorship are preserved.
 
 The delivery branches listed below are hosted in RISE. A fresh checkout
-requires access to each private repository and its Git LFS payloads.
+also fetches the Git LFS payloads of each repository.
 
 | Repository | Delivery branch | Checkout path |
 | --- | --- | --- |
@@ -40,12 +40,12 @@ requires access to each private repository and its Git LFS payloads.
 The manifest remote is:
 
 ```xml
-<remote name="rise" fetch="ssh://git@github.com/riseproject-dev/" />
+<remote name="rise" fetch="https://github.com/riseproject-dev/" />
 ```
 
 `repo` appends the project name to this prefix. For example,
 `android_device_rise` resolves to
-`ssh://git@github.com/riseproject-dev/android_device_rise`.
+`https://github.com/riseproject-dev/android_device_rise`.
 
 The HWC fork preserves the pinned Android source history and the original
 authors and signoffs of the preferred-mode and external sRGB fixes.
@@ -95,7 +95,7 @@ rise/
 Initialize the complete Android checkout:
 
 ```sh
-mkdir -p "$RISE_WORKSPACE/aosp" && cd "$RISE_WORKSPACE/aosp" && repo init -u git@github.com:riseproject-dev/android_manifest.git -b android-17 -m default.xml && repo sync -j24
+mkdir -p "$RISE_WORKSPACE/aosp" && cd "$RISE_WORKSPACE/aosp" && repo init -u https://github.com/riseproject-dev/android_manifest.git -b android-17 -m default.xml && repo sync -j24
 ```
 
 
@@ -141,13 +141,13 @@ The kernel device repo is shared, but the common branches and the selected
 K3 checkout:
 
 ```sh
-mkdir -p "$RISE_WORKSPACE/kernel_k3" && cd "$RISE_WORKSPACE/kernel_k3" && repo init -u git@github.com:riseproject-dev/android_manifest.git -b android-17 -m kernel-spacemit.xml && repo sync -j24
+mkdir -p "$RISE_WORKSPACE/kernel_k3" && cd "$RISE_WORKSPACE/kernel_k3" && repo init -u https://github.com/riseproject-dev/android_manifest.git -b android-17 -m kernel-spacemit.xml && repo sync -j24
 ```
 
 A210 checkout:
 
 ```sh
-mkdir -p "$RISE_WORKSPACE/kernel_alibaba" && cd "$RISE_WORKSPACE/kernel_alibaba" && repo init -u git@github.com:riseproject-dev/android_manifest.git -b android-17 -m kernel-alibaba.xml && repo sync -j24
+mkdir -p "$RISE_WORKSPACE/kernel_alibaba" && cd "$RISE_WORKSPACE/kernel_alibaba" && repo init -u https://github.com/riseproject-dev/android_manifest.git -b android-17 -m kernel-alibaba.xml && repo sync -j24
 ```
 
 
@@ -185,13 +185,13 @@ board configurations.
 K3 checkout:
 
 ```sh
-mkdir -p "$RISE_WORKSPACE/bootloaders_k3" && cd "$RISE_WORKSPACE/bootloaders_k3" && repo init -u git@github.com:riseproject-dev/android_manifest.git -b android-17 -m bootloader-spacemit.xml && repo sync -j24
+mkdir -p "$RISE_WORKSPACE/bootloaders_k3" && cd "$RISE_WORKSPACE/bootloaders_k3" && repo init -u https://github.com/riseproject-dev/android_manifest.git -b android-17 -m bootloader-spacemit.xml && repo sync -j24
 ```
 
 A210 checkout:
 
 ```sh
-mkdir -p "$RISE_WORKSPACE/bootloaders_alibaba" && cd "$RISE_WORKSPACE/bootloaders_alibaba" && repo init -u git@github.com:riseproject-dev/android_manifest.git -b android-17 -m bootloader-alibaba.xml && repo sync -j24
+mkdir -p "$RISE_WORKSPACE/bootloaders_alibaba" && cd "$RISE_WORKSPACE/bootloaders_alibaba" && repo init -u https://github.com/riseproject-dev/android_manifest.git -b android-17 -m bootloader-alibaba.xml && repo sync -j24
 ```
 
 
@@ -248,7 +248,7 @@ The PowerVR source matches commit
 RISE Mesa checkout against their respective RISE Android output trees.
 
 ```sh
-cd "$RISE_WORKSPACE" && git clone -b android-17-imagination git@github.com:riseproject-dev/mesa.git mesa
+cd "$RISE_WORKSPACE" && git clone -b android-17-imagination https://github.com/riseproject-dev/mesa.git mesa
 ```
 
 
@@ -317,7 +317,7 @@ needed to rebuild the APK are in the RISE recipe repository.
 Clone the recipe:
 
 ```sh
-cd "$RISE_WORKSPACE" && git clone -b android-17 git@github.com:riseproject-dev/android-webview-riscv64.git android-webview-riscv64
+cd "$RISE_WORKSPACE" && git clone -b android-17 https://github.com/riseproject-dev/android-webview-riscv64.git android-webview-riscv64
 ```
 
 Fetch, apply, build and inspect the riscv64 APK:

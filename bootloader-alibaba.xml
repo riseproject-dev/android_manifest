@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <manifest>
-  <remote name="rise" fetch="ssh://git@github.com/riseproject-dev/"/>
+  <remote name="rise" fetch="https://github.com/riseproject-dev/"/>
   <default remote="rise" sync-j="4"/>
 
   <!-- Alibaba A210 bootloader chain. See the manifest repo README for the
