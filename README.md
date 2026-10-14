@@ -169,8 +169,8 @@ cd "$RISE_WORKSPACE/kernel_alibaba" && KERNEL_DIST="$RISE_WORKSPACE/aosp/device/
 | K3 | `device/rise/spacemit/kernel/mainline` | `k3-pico-itx.dtb` |
 | A210 | `device/rise/alibaba/kernel/mainline` | `a210-evb.dtb` |
 
-The dist target exports the kernel `Image`, modules, DTB and its build
-metadata. Kernel updates must keep the Image and modules from the same
+The dist target exports the kernel `Image`, `vmlinux`, `System.map`,
+modules and DTB. Kernel updates must keep the Image and modules from the same
 build together. The K3 target exports only the K3 board DTB.
 The commands preserve the previous prebuilt directory under
 `$RISE_WORKSPACE/artifact-backups/` and export the complete new distribution
@@ -214,13 +214,9 @@ cd "$RISE_WORKSPACE/bootloaders_alibaba/build-bootloaders" && bash release_andro
 | A210 | `config/boards/alibaba-a210.yaml` | `vendor/rise/alibaba/a210/bootloader` |
 
 The default release command copies files without making a commit or changing
-the Git index. `--mode=debug` builds the debug chain. Each successful build
-records source commits, configuration, output hashes and its build log in
-`.bootloader-build.json` inside its output directory. Staging verifies this
-record and every artifact before copying anything, then records the import in the Android
-destination's `bootloader-build.json`. `--no-build` requires this valid record;
-an unrecorded or changed output is rejected. See the board-specific README
-in `build-bootloaders` for individual component builds.
+the Git index. `--mode=debug` builds the debug chain. `--no-build` stages
+the outputs of a previous build. See the board-specific README in
+`build-bootloaders` for individual component builds.
 
 K3 FSBL and bootinfo are produced by its U-Boot tree. EC firmware is an
 optional existing vendor blob selected with `EC_BIN`; it is not rebuilt by
@@ -341,7 +337,7 @@ After verifying the replacement APK, preserve the old binary and copy the new
 one into the existing shared module:
 
 ```sh
-mkdir -p "$RISE_WORKSPACE/artifact-backups" && WEBVIEW_BACKUP="$(mktemp -d "$RISE_WORKSPACE/artifact-backups/webview.XXXXXX")" && cp "$RISE_WORKSPACE/aosp/device/rise/common/webview/SystemWebView64.apk" "$RISE_WORKSPACE/aosp/device/rise/common/webview/webview-build.json" "$WEBVIEW_BACKUP/" && cp "$RISE_WORKSPACE/android-webview-riscv64/workspace/src/out/riscv64/apks/SystemWebView64.apk" "$RISE_WORKSPACE/aosp/device/rise/common/webview/SystemWebView64.apk"
+mkdir -p "$RISE_WORKSPACE/artifact-backups" && WEBVIEW_BACKUP="$(mktemp -d "$RISE_WORKSPACE/artifact-backups/webview.XXXXXX")" && cp "$RISE_WORKSPACE/aosp/device/rise/common/webview/SystemWebView64.apk" "$WEBVIEW_BACKUP/" && cp "$RISE_WORKSPACE/android-webview-riscv64/workspace/src/out/riscv64/apks/SystemWebView64.apk" "$RISE_WORKSPACE/aosp/device/rise/common/webview/SystemWebView64.apk"
 ```
 
 
@@ -355,10 +351,7 @@ and bundled commits. APK verification passes: package `com.android.webview`,
 version `151.0.7922.108`, target SDK 36 and RISC-V ELF machine 243. The staged
 APK is 145,131,247 bytes with SHA-256
 `09dae1f296faeb93e9d61cebdbca52111d21065358f45ee380e005176d73d006`.
-Its committed `device/rise/common/webview/webview-build.json` records source
-commits, verified dependency/toolchain inputs and payload hashes. Regenerate
-that provenance record when replacing the APK; it must describe the new
-binary. The old binary and record are preserved by the command above.
+The command above preserves the old binary.
 
 The rebuilt RISE provider passed a real-page WebView test on K3 on
 2026-10-12. Android signs the installed APK with `default_dev_cert`, so its
