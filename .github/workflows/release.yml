@@ -1,0 +1,109 @@
+name: release
+
+# Turns a nightly pre-release into a draft release: the images are
+# repackaged under the release name, the kernel and bootloader manifests
+# that the prebuilt updates pinned join default.xml, and the notes start
+# from those of the previous release, with the changes since it. Publishing
+# the draft tags the sources (release-tags.yml).
+on:
+  workflow_dispatch:
+    inputs:
+      nightly:
+        description: Nightly pre-release to release, such as android-17-nightly-20261118
+        required: true
+        type: string
+      version:
+        description: Release version, such as v1.1
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  BRANCH: android-17
+
+jobs:
+  draft:
+    runs-on: ubuntu-24.04
+    env:
+      NIGHTLY: ${{ inputs.nightly }}
+      VERSION: ${{ inputs.version }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Check the inputs
+        run: |
+          [[ $NIGHTLY =~ ^$BRANCH-nightly-[0-9]{8}(-[0-9]{4})?$ ]] || { echo "Unexpected nightly '$NIGHTLY'." >&2; exit 1; }
+          [[ $VERSION =~ ^v[0-9]+\.[0-9]+$ ]] || { echo "Unexpected version '$VERSION'." >&2; exit 1; }
+          tag="$BRANCH-$VERSION"
+          if gh release view "$tag" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "$tag already exists." >&2
+            exit 1
+          fi
+          previous=$(gh release list -R "$GITHUB_REPOSITORY" --exclude-drafts --exclude-pre-releases \
+            --limit 100 --json tagName --jq "[.[] | select(.tagName | startswith(\"$BRANCH-v\"))][0].tagName // \"\"")
+          [ -n "$previous" ] || { echo "No previous release to start the notes from." >&2; exit 1; }
+          {
+            echo "TAG=$tag"
+            echo "PREVIOUS=$previous"
+          } >> "$GITHUB_ENV"
+
+      - name: Download the nightly
+        run: |
+          gh release download "$NIGHTLY" -R "$GITHUB_REPOSITORY" -D nightly
+          (cd nightly && sha256sum -c --quiet SHA256SUMS)
+          target=$(gh release view "$NIGHTLY" -R "$GITHUB_REPOSITORY" --json targetCommitish --jq .targetCommitish)
+          [[ $target =~ ^[0-9a-f]{40}$ ]] || { echo "Unexpected target '$target'." >&2; exit 1; }
+          gh api "repos/$GITHUB_REPOSITORY/compare/$target...$BRANCH" --jq .status | grep -qxE 'identical|ahead' ||
+            { echo "Target $target is not on $BRANCH." >&2; exit 1; }
+          echo "TARGET=$target" >> "$GITHUB_ENV"
+
+      # The manifests of the released commit tell which projects and branches
+      # the pinned manifests may name.
+      - name: Check out the released commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          ref: ${{ env.TARGET }}
+          path: ci
+          persist-credentials: false
+
+      - name: Download the previous release
+        run: |
+          mkdir previous
+          gh release download "$PREVIOUS" -R "$GITHUB_REPOSITORY" -p '*.xml' -D previous
+          gh release view "$PREVIOUS" -R "$GITHUB_REPOSITORY" --json body --jq .body > previous/notes.md
+
+      - name: Collect the pinned manifests
+        run: |
+          mkdir release
+          cp nightly/default.xml release/
+          python3 ci/.github/scripts/release.py manifests --dir release --trusted ci --previous previous
+
+      # Only the top directory of each package carries the release name.
+      - name: Repackage the images
+        run: |
+          for board in k3-pico-itx a210-evb; do
+            old="rise-$NIGHTLY-$board"
+            new="rise-$TAG-$board"
+            mkdir work
+            tar -xzf "nightly/$old.tar.gz" -C work
+            mv "work/$old" "work/$new"
+            tar -czf "release/$new.tar.gz" -C work "$new"
+            rm -rf work
+          done
+          cd release
+          sha256sum ./*.tar.gz ./*.xml > SHA256SUMS
+
+      - name: Write the notes
+        run: |
+          python3 ci/.github/scripts/release.py notes --tag "$TAG" --previous-tag "$PREVIOUS" \
+            --previous previous --dir release > notes.md
+
+      - name: Create the draft release
+        run: |
+          gh release create "$TAG" -R "$GITHUB_REPOSITORY" --draft --target "$TARGET" \
+            --title "RISE Android 17 $VERSION" --notes-file notes.md release/*

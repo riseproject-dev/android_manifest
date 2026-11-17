@@ -1,0 +1,60 @@
+name: release tags
+
+# Tags the RISE sources of a release once its draft is published: every
+# riseproject-dev project of the pinned manifests gets the release tag, or
+# one tag per board when the boards build different revisions of it.
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  tag:
+    if: startsWith(github.event.release.tag_name, 'android-17-v') && !github.event.release.prerelease
+    runs-on: ubuntu-24.04
+    env:
+      BRANCH: android-17
+      TAG: ${{ github.event.release.tag_name }}
+    steps:
+      # The released commit provides the scripts and the manifests trusted
+      # below: it must be one of the branch.
+      - name: Check the released commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/compare/$GITHUB_SHA...$BRANCH" --jq .status | grep -qxE 'identical|ahead' ||
+            { echo "$TAG points to $GITHUB_SHA, which is not on $BRANCH." >&2; exit 1; }
+
+      # The manifests of the released commit tell which projects and branches
+      # the pinned manifests may name.
+      - name: Check out the released commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          path: ci
+          persist-credentials: false
+
+      - name: List the repositories to tag
+        id: repos
+        run: echo "list=$(python3 ci/.github/scripts/release.py repos --trusted ci)" >> "$GITHUB_OUTPUT"
+
+      - name: Download the pinned manifests
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download "$TAG" -R "$GITHUB_REPOSITORY" -p '*.xml' -D manifests
+
+      - name: Get a riseproject-dev App token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1  # v3.2.0
+        with:
+          client-id: ${{ vars.RISEPROJECT_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RISEPROJECT_APP_PRIVATE_KEY }}
+          owner: riseproject-dev
+          repositories: ${{ steps.repos.outputs.list }}
+          permission-contents: write
+
+      - name: Tag the sources
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: python3 ci/.github/scripts/release.py tag --tag "$TAG" --dir manifests --trusted ci

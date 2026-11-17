@@ -1,0 +1,258 @@
+name: nightly
+
+on:
+  schedule:
+    # GitHub often drops the schedules set on the hour.
+    - cron: '23 1 * * *'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: Build even if no source changed since the last nightly
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly
+  cancel-in-progress: false
+
+env:
+  BRANCH: android-17
+  PREFIX: android-17-nightly-
+
+jobs:
+  build:
+    runs-on: aosp-builder
+    timeout-minutes: 1080
+    env:
+      OUT_DIR: out
+    outputs:
+      build: ${{ steps.check.outputs.build }}
+      tag: ${{ steps.name.outputs.tag }}
+      target: ${{ steps.name.outputs.target }}
+    steps:
+      - name: Check out the CI scripts
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          path: ci
+          sparse-checkout: .github
+
+      # The builder has a single runner, so no other job uses these. The
+      # cleanup steps of a job do not run when the runner itself stops.
+      - name: Remove the leftovers of interrupted jobs
+        run: |
+          git config --global --unset http.cookiefile || true
+          git config --global --remove-section url.https://android.googlesource.com/a/ || true
+          rm -rf "${RISE_WORKSPACE:-$HOME/rise}"/work/* "${RISE_WORKSPACE:-$HOME/rise}"/aosp/out*
+
+      # The Android build host packages, and repo, which comes from Google
+      # rather than from Ubuntu.
+      - name: Install the build tools
+        run: |
+          sudo apt-get update -q
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q --no-install-recommends \
+            gh git-lfs gnupg flex bison build-essential zip unzip zlib1g-dev libc6-dev-i386 \
+            x11proto-core-dev libx11-dev lib32z1-dev libgl1-mesa-dev libxml2-utils \
+            xsltproc fontconfig rsync
+          bin="${RISE_WORKSPACE:-$HOME/rise}/bin"
+          mkdir -p "$bin"
+          curl -fsSL https://storage.googleapis.com/git-repo-downloads/repo -o "$bin/repo"
+          chmod +x "$bin/repo"
+          echo "$bin" >> "$GITHUB_PATH"
+
+      # Anonymous googlesource fetches are rate limited per IP. The secret is
+      # the cookie line of the googlesource password page, with commas instead
+      # of tabs, and the /a/ prefix makes googlesource authenticate the request.
+      - name: Authenticate to googlesource
+        env:
+          COOKIES: ${{ secrets.GOOGLESOURCE_COOKIES }}
+        run: |
+          [ -n "$COOKIES" ] || { echo "GOOGLESOURCE_COOKIES is not set." >&2; exit 1; }
+          (umask 077; printf '%s\n' "$COOKIES" | tr , '\t' > "$RUNNER_TEMP/gitcookies")
+          git config --global http.cookiefile "$RUNNER_TEMP/gitcookies"
+          git config --global url.https://android.googlesource.com/a/.insteadOf https://android.googlesource.com/
+
+      # The Android tree persists on the builder between runs. Its objects
+      # come from a cache that the Mesa update shares, so a change is
+      # downloaded only once. The cache is a plain repo client rather than a
+      # mirror, as mirrors ignore clone-depth and would fetch the whole history
+      # of the prebuilts.
+      - name: Sync Android
+        run: |
+          ws="${RISE_WORKSPACE:-$HOME/rise}"
+          echo "AOSP_WS=$ws/aosp" >> "$GITHUB_ENV"
+          mkdir -p "$ws/cache/default" "$ws/aosp"
+          cd "$ws/cache/default"
+          flock "$ws/cache/default.lock" sh -c "repo init -q -u https://github.com/$GITHUB_REPOSITORY -b $BRANCH -m default.xml &&
+            repo sync -q -n -c -j$(nproc) --no-tags"
+          cd "$ws/aosp"
+          repo init -u "https://github.com/$GITHUB_REPOSITORY" -b "$BRANCH" -m default.xml --reference="$ws/cache/default"
+          repo sync -c -j"$(nproc)" --no-tags --force-sync --force-checkout -d --verify
+          repo manifest -r -o "$RUNNER_TEMP/default.xml"
+
+      # The build runs code from every synced project.
+      - name: Remove the googlesource credentials
+        if: always()
+        run: |
+          rm -f "$RUNNER_TEMP/gitcookies"
+          git config --global --unset http.cookiefile || true
+          git config --global --remove-section url.https://android.googlesource.com/a/ || true
+
+      # The pinned manifest of the last nightly records what it was built from.
+      - name: Compare with the last nightly
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FORCE: ${{ inputs.force || false }}
+        run: |
+          last=$(gh release list -R "$GITHUB_REPOSITORY" --limit 100 --json tagName,isPrerelease \
+            --jq "[.[] | select(.isPrerelease and (.tagName | startswith(\"$PREFIX\")))][0].tagName // \"\"")
+          build=true
+          if [ -n "$last" ] && [ "$FORCE" != true ]; then
+            gh release download "$last" -R "$GITHUB_REPOSITORY" -p default.xml -D "$RUNNER_TEMP/last"
+            if cmp -s "$RUNNER_TEMP/default.xml" "$RUNNER_TEMP/last/default.xml"; then
+              echo "No source change since $last."
+              build=false
+            fi
+          fi
+          echo "build=$build" >> "$GITHUB_OUTPUT"
+
+      - name: Name the nightly
+        if: steps.check.outputs.build == 'true'
+        id: name
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="$PREFIX$(date -u +%Y%m%d)"
+          gh release view "$tag" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1 && tag="$tag-$(date -u +%H%M)"
+          echo "TAG=$tag" >> "$GITHUB_ENV"
+          {
+            echo "tag=$tag"
+            echo "target=$(git -C "$AOSP_WS/.repo/manifests" rev-parse HEAD)"
+          } >> "$GITHUB_OUTPUT"
+
+      # Both boards build in the same output directory, so that the second
+      # one reuses the host tools and the architecture independent modules.
+      - name: Build Android for the K3 Pico-ITX
+        if: steps.check.outputs.build == 'true'
+        shell: bash
+        run: |
+          cd "$AOSP_WS"
+          # envsetup.sh and lunch do not run under errexit.
+          set +e
+          source build/envsetup.sh
+          lunch aosp_k3_pico_itx-trunk_staging-userdebug || exit 1
+          set -e
+          make TARGET_KERNEL_USE=mainline -j"$(nproc)"
+
+      # The K3 images are removed once packaged, to leave room for the A210.
+      - name: Package the K3 Pico-ITX images
+        if: steps.check.outputs.build == 'true'
+        run: |
+          bash ci/.github/scripts/package-android.sh "$AOSP_WS" "$OUT_DIR" k3 "$TAG" "$RUNNER_TEMP/default.xml" "$RUNNER_TEMP/release"
+          rm -rf "$AOSP_WS/$OUT_DIR/target/product/k3"
+
+      # Build the A210 even when the K3 build fails, to report both.
+      - name: Build Android for the A210 EVB
+        if: ${{ !cancelled() && steps.check.outputs.build == 'true' }}
+        shell: bash
+        run: |
+          cd "$AOSP_WS"
+          # envsetup.sh and lunch do not run under errexit.
+          set +e
+          source build/envsetup.sh
+          lunch aosp_a210_evb-trunk_staging-userdebug || exit 1
+          set -e
+          make TARGET_KERNEL_USE=mainline -j"$(nproc)"
+
+      - name: Package the A210 EVB images
+        if: steps.check.outputs.build == 'true'
+        run: bash ci/.github/scripts/package-android.sh "$AOSP_WS" "$OUT_DIR" a210 "$TAG" "$RUNNER_TEMP/default.xml" "$RUNNER_TEMP/release"
+
+      - name: Add the manifest and the checksums
+        if: steps.check.outputs.build == 'true'
+        working-directory: ${{ runner.temp }}/release
+        run: |
+          cp "$RUNNER_TEMP/default.xml" default.xml
+          sha256sum ./*.tar.gz default.xml > SHA256SUMS
+
+      - name: Upload the images
+        if: steps.check.outputs.build == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: nightly
+          path: ${{ runner.temp }}/release
+          retention-days: 1
+          # The tarballs are already compressed.
+          compression-level: 0
+
+      # Only the Android tree and the repo cache persist on the builder.
+      - name: Remove the build outputs
+        if: always()
+        run: rm -rf "${RISE_WORKSPACE:-$HOME/rise}/aosp/out" ci
+
+  # Publish from a GitHub-hosted runner so that the App private key never
+  # reaches the AOSP builder, which runs code from every synced project.
+  publish:
+    needs: build
+    if: needs.build.outputs.build == 'true'
+    runs-on: ubuntu-24.04
+    env:
+      TAG: ${{ needs.build.outputs.tag }}
+      TARGET: ${{ needs.build.outputs.target }}
+      # Number of nightly pre-releases kept.
+      KEEP: 7
+    steps:
+      # The builder runs code from every synced project: check what it hands
+      # over before publishing with the App token.
+      - name: Check the build outputs
+        run: |
+          [[ $TAG =~ ^${PREFIX}[0-9]{8}(-[0-9]{4})?$ ]] || { echo "Unexpected tag '$TAG'." >&2; exit 1; }
+          # Releases trust the manifests and scripts of the target: it must be
+          # the commit this run started from, not one the builder picks.
+          [ "$TARGET" = "$GITHUB_SHA" ] || { echo "Target '$TARGET' is not $GITHUB_SHA." >&2; exit 1; }
+          gh api "repos/$GITHUB_REPOSITORY/compare/$TARGET...$BRANCH" --jq .status | grep -qxE 'identical|ahead' ||
+            { echo "Target $TARGET is not on $BRANCH." >&2; exit 1; }
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Download the images
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
+        with:
+          name: nightly
+          path: release
+
+      - name: Get a riseproject-dev App token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1  # v3.2.0
+        with:
+          client-id: ${{ vars.RISEPROJECT_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RISEPROJECT_APP_PRIVATE_KEY }}
+          permission-contents: write
+
+      - name: Publish the pre-release
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          cat > "$RUNNER_TEMP/notes.md" <<EOF
+          Automated build of the \`$BRANCH\` branch for the SpacemiT K3 Pico-ITX and
+          the Alibaba A210 EVB. It is not tested on hardware.
+
+          \`default.xml\` pins every project to the commit built. Flash the images
+          as described in the release notes of the last stable release.
+          EOF
+          gh release create "$TAG" -R "$GITHUB_REPOSITORY" --prerelease --target "$TARGET" \
+            --title "Android 17 nightly ${TAG#"$PREFIX"}" --notes-file "$RUNNER_TEMP/notes.md" \
+            release/*
+
+      - name: Remove old nightlies
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          gh release list -R "$GITHUB_REPOSITORY" --limit 100 --json tagName,isPrerelease \
+            --jq "[.[] | select(.isPrerelease and (.tagName | startswith(\"$PREFIX\"))) | .tagName] | .[$KEEP:][]" |
+            while read -r tag; do
+              gh release delete "$tag" -R "$GITHUB_REPOSITORY" --yes --cleanup-tag
+            done
