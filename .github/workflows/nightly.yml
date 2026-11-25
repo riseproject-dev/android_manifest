@@ -256,3 +256,126 @@ jobs:
             while read -r tag; do
               gh release delete "$tag" -R "$GITHUB_REPOSITORY" --yes --cleanup-tag
             done
+
+  # Trigger and track Labgrid flash + boot validation on OSU-OSL A210 hardware
+  # without blocking nightly pre-release publication if hardware is busy or fails.
+  test-a210:
+    name: test a210 on hardware
+    needs: [build, publish]
+    if: needs.build.outputs.build == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 65
+    env:
+      TAG: ${{ needs.build.outputs.tag }}
+      HW_REPO: riseproject-dev/developer-cloud
+      HW_WORKFLOW: aosp-zhihe-a210.yml
+    steps:
+      - name: Get a riseproject-dev App token for developer-cloud
+        id: hw-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1  # v3.2.0
+        with:
+          client-id: ${{ vars.RISEPROJECT_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RISEPROJECT_APP_PRIVATE_KEY }}
+          owner: riseproject-dev
+          repositories: developer-cloud
+          permission-contents: write
+
+      - name: Dispatch hardware validation in developer-cloud
+        id: dispatch
+        env:
+          DISPATCH_TOKEN: ${{ steps.hw-token.outputs.token }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          prev_id=$(gh api "repos/$HW_REPO/actions/workflows/$HW_WORKFLOW/runs?event=repository_dispatch&per_page=1" \
+            --jq '.workflow_runs[0].id // 0')
+          echo "prev_id=$prev_id" >> "$GITHUB_OUTPUT"
+          jq -n --arg tag "$TAG" --arg repo "$GITHUB_REPOSITORY" \
+            '{event_type: "aosp-nightly-published", client_payload: {release_tag: $tag, release_repo: $repo, expected_kernel_prefix: "7.1"}}' |
+            GH_TOKEN="$DISPATCH_TOKEN" gh api "repos/$HW_REPO/dispatches" --input -
+
+      - name: Wait for hardware validation run
+        id: watch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PREV_ID: ${{ steps.dispatch.outputs.prev_id }}
+        run: |
+          run_id=""
+          for _ in $(seq 1 18); do
+            sleep 5
+            run_id=$(gh api "repos/$HW_REPO/actions/workflows/$HW_WORKFLOW/runs?event=repository_dispatch&per_page=5" \
+              --jq "[.workflow_runs[] | select(.id > ($PREV_ID | tonumber))] | sort_by(.id) | .[0].id // empty")
+            if [ -n "$run_id" ]; then
+              break
+            fi
+          done
+          [ -n "$run_id" ] || { echo "Timed out waiting for $HW_REPO/$HW_WORKFLOW dispatch run to appear." >&2; exit 1; }
+          run_url="https://github.com/$HW_REPO/actions/runs/$run_id"
+          {
+            echo "run_id=$run_id"
+            echo "run_url=$run_url"
+          } >> "$GITHUB_OUTPUT"
+          echo "Tracking hardware validation run: $run_url"
+          gh run watch "$run_id" -R "$HW_REPO" --interval 15 --exit-status
+
+      - name: Publish hardware validation summary
+        if: always() && steps.watch.outputs.run_id != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ steps.watch.outputs.run_id }}
+          RUN_URL: ${{ steps.watch.outputs.run_url }}
+        run: |
+          conclusion=$(gh api "repos/$HW_REPO/actions/runs/$RUN_ID" --jq '.conclusion // "unknown"')
+          {
+            echo "### Zhihe A210 Nightly Hardware Validation"
+            echo "- **Nightly Release**: \`$TAG\`"
+            echo "- **Hardware Run**: [$HW_REPO#$RUN_ID]($RUN_URL)"
+            echo "- **Conclusion**: \`$conclusion\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+          mkdir -p "$RUNNER_TEMP/hw-results"
+          if gh run download "$RUN_ID" -R "$HW_REPO" -D "$RUNNER_TEMP/hw-results" 2>/dev/null; then
+            xml_file=$(find "$RUNNER_TEMP/hw-results" -name aosp_boot_results.xml -print -quit)
+            if [ -n "$xml_file" ]; then
+              python3 - "$xml_file" >> "$GITHUB_STEP_SUMMARY" <<'PY'
+          import sys
+          import xml.etree.ElementTree as ET
+          tree = ET.parse(sys.argv[1])
+          print("\n| Test | Result | Time (s) |")
+          print("| --- | --- | --- |")
+          for tc in tree.iter("testcase"):
+              name = tc.attrib.get("name", "")
+              elapsed = tc.attrib.get("time", "")
+              if tc.find("failure") is not None or tc.find("error") is not None:
+                  status = "FAIL"
+              elif tc.find("skipped") is not None:
+                  status = "SKIP"
+              else:
+                  status = "PASS"
+              print(f"| `{name}` | `{status}` | `{elapsed}` |")
+          PY
+            fi
+          fi
+
+      - name: Get a riseproject-dev App token for release notes
+        if: success()
+        id: notes-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1  # v3.2.0
+        with:
+          client-id: ${{ vars.RISEPROJECT_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RISEPROJECT_APP_PRIVATE_KEY }}
+          permission-contents: write
+
+      - name: Record hardware validation in pre-release notes
+        if: success()
+        env:
+          GH_TOKEN: ${{ steps.notes-token.outputs.token }}
+          RUN_URL: ${{ steps.watch.outputs.run_url }}
+        run: |
+          cat > "$RUNNER_TEMP/notes.md" <<EOF
+          Automated build of the \`$BRANCH\` branch for the SpacemiT K3 Pico-ITX and
+          the Alibaba A210 EVB. Validated on Alibaba A210 EVB hardware at OSU-OSL
+          ($RUN_URL); SpacemiT K3 Pico-ITX is not yet tested on hardware.
+
+          \`default.xml\` pins every project to the commit built. Flash the images
+          as described in the release notes of the last stable release.
+          EOF
+          gh release edit "$TAG" -R "$GITHUB_REPOSITORY" --notes-file "$RUNNER_TEMP/notes.md"
